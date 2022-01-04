@@ -1,0 +1,137 @@
+# ***************** Initialization # basis  ***************
+
+echo	both
+
+units		real
+dimension	3
+boundary	p   p   p
+atom_style	full
+atom_modify	map	hash
+
+# ****************** read data  *****************
+
+read_restart	nvt.restart
+
+mass	1	39.102000	# K
+mass	2	14.006700	# n3
+mass	3	15.999400	# o
+
+# *******************  Define a few parameters  ********************** 
+
+variable    T	equal  823			# melt temperature
+variable    T2	equal  273			# cool temperature
+variable    T3	equal  773			# cool temperature
+variable	Pre	equal	1			# Pressure
+variable	DT	equal   1			# timestep    1fs   (Read from the restart file)
+
+# *********************  Potential  function setting  *****************
+
+pair_style	buck/coul/long	25.0
+
+pair_coeff	1	1	35833.47	0.337	349.9   #K
+pair_coeff	1	2	34725.996	0.2964	301.1
+pair_coeff	1	3	47188.937	0.2815	301.27
+pair_coeff	2	2	33652.75	0.2646	259.1   #N
+pair_coeff	2	3	45730.51	0.2513	259.25
+pair_coeff	3	3	62142.9		0.2392	259.4   #O
+
+kspace_style	pppm	1e-5
+
+bond_style	harmonic
+bond_coeff	1	525.0	1.2676	#N-O
+
+angle_style	harmonic
+angle_coeff	1	105.0	120.0	#O-N-O
+
+improper_style	harmonic
+improper_coeff	1	60.0	0.0	#O-N-O-O
+
+timestep	${DT}
+
+neighbor    2.0 bin
+neigh_modify    every   1   delay   0   check   yes one 5000
+
+# *********************  thermo output  ************************
+
+#thermo		5000
+#thermo_style	custom	step	temp	lx	ly	lz	vol	press	pe	ke	etotal
+
+# *********************** Initialization relaxation ***********************
+# ***********************   Optimize at  0 K  ***********************
+# ***********************  Static equilibrium  **************************
+
+#dump		1	all	custom	1000	dump.mini	id	type	x	y	z  
+#dump_modify	1	sort	id
+
+#min_style	cg   
+#minimize	1.0e-5	1.0e-8	1000000	1000000
+#undump		1
+
+#  *************************  Set velocity  **********************
+
+#reset_timestep	0
+       
+#velocity 	all	create	 ${T}  6764	mom	yes	rot	yes	dist	gaussian
+
+# ****************  Melt and cool to target temperature ********************
+
+#fix		1	all	npt		temp	${T2}	${T2}	100	aniso	${Pre}	${Pre}	500
+
+#thermo_style 	custom	step	temp	vol	press	etotal
+
+#dump		1	all	custom	500000	optimize.dump	id	type	x	y	z
+#dump_modify	1	sort	id
+
+#restart	1000000    optimize.restart
+
+#run		1000000
+
+#undump		1
+#unfix		1
+
+#fix		3	all	npt	temp	${T}	${T2}	100	aniso	${Pre}	${Pre}	500
+
+#thermo_style 	custom	step	temp	vol	press	etotal	enthalpy
+
+#dump		3	all	custom	500000	cooldwon.dump	id	type	x	y	z
+#dump_modify	3	sort	id
+
+#restart	1000000    cooldwon.restart
+
+#run		1000000
+
+#undump		3
+#unfix		3
+
+#fix	2	all	nvt	temp	${T2}	${T2}	100
+
+#thermo_style 	custom	step	temp	vol	press	etotal
+
+#run		1000000
+
+#unfix	2
+
+#write_restart	nvt.restart
+
+# ****************  heat to capture the etotal and enthalpy  ********************
+
+variable	Temp	equal	temp
+variable	Et	equal	etotal
+variable	Enth	equal	enthalpy
+variable    V       equal   vol
+variable    P       equal   press
+
+fix		4	all	npt     temp	${T2}	${T}	100	aniso	${Pre}	${Pre}	500
+
+#variable    En2      equal   " ( pe + ke ) + ( vol * c_4_press * 6.24151 * 1e-5 ) "
+
+thermo_style 	custom	step	temp	vol	press   etotal enthalpy
+
+dump		4	all	custom	50000	heat.dump	id	type	x	y	z 
+dump_modify	4	sort	id
+
+fix		totalE	all	ave/time   50   100   5000	v_Temp	v_Et	v_Enth	file	totalE2.txt
+
+restart	500000    Cp_2.restart
+
+run		1000000

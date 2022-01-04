@@ -1,0 +1,220 @@
+LAMMPS (29 Oct 2020)
+# ***************** Initialization # basis  ***************
+
+echo	both
+
+units		real
+dimension	3
+boundary	p   p   p
+atom_style	full
+atom_modify	map	hash
+
+# ****************** read data  *****************
+
+read_restart	nvt.restart
+Reading restart file ...
+  restart file = 29 Oct 2020, LAMMPS = 29 Oct 2020
+  restoring atom style full from restart
+  orthogonal box = (1.4771841 3.4212542 -2.7828971) to (50.845019 50.338543 55.588601)
+  2 by 2 by 4 MPI processor grid
+  restoring pair style buck/coul/long from restart
+  restoring bond style harmonic from restart
+  restoring angle style harmonic from restart
+  restoring improper style harmonic from restart
+  9000 atoms
+  5400 bonds
+  5400 angles
+  1800 impropers
+Finding 1-2 1-3 1-4 neighbors ...
+  special bond factors lj:    0.0      0.0      0.0     
+  special bond factors coul:  0.0      0.0      0.0     
+     3 = max # of 1-2 neighbors
+     2 = max # of 1-3 neighbors
+     2 = max # of 1-4 neighbors
+     3 = max # of special neighbors
+  special bonds CPU = 0.004 seconds
+  read_restart CPU = 0.017 seconds
+
+mass	1	39.102000	# K
+mass	2	14.006700	# n3
+mass	3	15.999400	# o
+
+# *******************  Define a few parameters  **********************
+
+variable    T	equal  823			# melt temperature
+variable    T2	equal  273			# cool temperature
+variable    T3	equal  773			# cool temperature
+variable	Pre	equal	1			# Pressure
+variable	DT	equal   1			# timestep    1fs   (Read from the restart file)
+
+# *********************  Potential  function setting  *****************
+
+pair_style	buck/coul/long	25.0
+
+pair_coeff	1	1	35833.47	0.337	349.9   #K
+pair_coeff	1	2	34725.996	0.2964	301.1
+pair_coeff	1	3	47188.937	0.2815	301.27
+pair_coeff	2	2	33652.75	0.2646	259.1   #N
+pair_coeff	2	3	45730.51	0.2513	259.25
+pair_coeff	3	3	62142.9		0.2392	259.4   #O
+
+kspace_style	pppm	1e-5
+
+bond_style	harmonic
+bond_coeff	1	525.0	1.2676	#N-O
+
+angle_style	harmonic
+angle_coeff	1	105.0	120.0	#O-N-O
+
+improper_style	harmonic
+improper_coeff	1	60.0	0.0	#O-N-O-O
+
+timestep	${DT}
+timestep	1
+
+neighbor    2.0 bin
+neigh_modify    every   1   delay   0   check   yes one 5000
+
+# *********************  thermo output  ************************
+
+#thermo		5000
+#thermo_style	custom	step	temp	lx	ly	lz	vol	press	pe	ke	etotal
+
+# *********************** Initialization relaxation ***********************
+# ***********************   Optimize at  0 K  ***********************
+# ***********************  Static equilibrium  **************************
+
+#dump		1	all	custom	1000	dump.mini	id	type	x	y	z
+#dump_modify	1	sort	id
+
+#min_style	cg
+#minimize	1.0e-5	1.0e-8	1000000	1000000
+#undump		1
+
+#  *************************  Set velocity  **********************
+
+#reset_timestep	0
+
+#velocity 	all	create	 ${T}  6764	mom	yes	rot	yes	dist	gaussian
+
+# ****************  Melt and cool to target temperature ********************
+
+#fix		1	all	npt		temp	${T2}	${T2}	100	aniso	${Pre}	${Pre}	500
+
+#thermo_style 	custom	step	temp	vol	press	etotal
+
+#dump		1	all	custom	500000	optimize.dump	id	type	x	y	z
+#dump_modify	1	sort	id
+
+#restart	1000000    optimize.restart
+
+#run		1000000
+
+#undump		1
+#unfix		1
+
+#fix		3	all	npt	temp	${T}	${T2}	100	aniso	${Pre}	${Pre}	500
+
+#thermo_style 	custom	step	temp	vol	press	etotal	enthalpy
+
+#dump		3	all	custom	500000	cooldwon.dump	id	type	x	y	z
+#dump_modify	3	sort	id
+
+#restart	1000000    cooldwon.restart
+
+#run		1000000
+
+#undump		3
+#unfix		3
+
+#fix	2	all	nvt	temp	${T2}	${T2}	100
+
+#thermo_style 	custom	step	temp	vol	press	etotal
+
+#run		1000000
+
+#unfix	2
+
+#write_restart	nvt.restart
+
+# ****************  heat to capture the etotal and enthalpy  ********************
+
+variable	Temp	equal	temp
+variable	Et	equal	etotal
+variable	Enth	equal	enthalpy
+variable    V       equal   vol
+variable    P       equal   press
+
+fix		4	all	npt     temp	${T2}	${T}	100	aniso	${Pre}	${Pre}	500
+fix		4	all	npt     temp	273	${T}	100	aniso	${Pre}	${Pre}	500
+fix		4	all	npt     temp	273	823	100	aniso	${Pre}	${Pre}	500
+fix		4	all	npt     temp	273	823	100	aniso	1	${Pre}	500
+fix		4	all	npt     temp	273	823	100	aniso	1	1	500
+
+#variable    En2      equal   " ( pe + ke ) + ( vol * c_4_press * 6.24151 * 1e-5 ) "
+
+thermo_style 	custom	step	temp	vol	press   etotal enthalpy
+
+dump		4	all	custom	50000	heat.dump	id	type	x	y	z
+dump_modify	4	sort	id
+
+fix		totalE	all	ave/time   50   100   5000	v_Temp	v_Et	v_Enth	file	totalE2.txt
+
+restart	500000    Cp_2.restart
+
+run		1000000
+PPPM initialization ...
+  using 12-bit tables for long-range coulomb (../kspace.cpp:328)
+  G vector (1/distance) = 0.12189838
+  grid = 18 16 20
+  stencil order = 5
+  estimated absolute RMS force accuracy = 0.0028421492
+  estimated relative force accuracy = 8.559048e-06
+  using double precision KISS FFT
+  3d grid and FFT values/proc = 1820 576
+Neighbor list info ...
+  update every 1 steps, delay 0 steps, check yes
+  max neighbors/atom: 5000, page size: 100000
+  master list distance cutoff = 27
+  ghost atom cutoff = 27
+  binsize = 13.5, bins = 4 4 5
+  1 neighbor lists, perpetual/occasional/extra = 1 0 0
+  (1) pair buck/coul/long, perpetual
+      attributes: half, newton on
+      pair build: half/bin/newton
+      stencil: half/bin/3d/newton
+      bin: standard
+Per MPI rank memory allocation (min/avg/max) = 24.36 | 24.54 | 24.76 Mbytes
+Step Temp Volume Press TotEng Enthalpy 
+ 2000000    273.48239    135200.35   -697.79138   -22839.135   -24215.011 
+ 3000000    808.42786     168328.6    449.16253    15256.134    16358.783 
+Loop time of 57889.3 on 16 procs for 1000000 steps with 9000 atoms
+
+Performance: 1.493 ns/day, 16.080 hours/ns, 17.274 timesteps/s
+99.1% CPU use with 16 MPI tasks x no OpenMP threads
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 47590      | 49616      | 51632      | 585.1 | 85.71
+Bond    | 53.946     | 55.887     | 58.238     |  16.1 |  0.10
+Kspace  | 2491       | 4422       | 6549.6     |1978.6 |  7.64
+Neigh   | 817.67     | 825.47     | 836.48     |  22.7 |  1.43
+Comm    | 2317.3     | 2486.4     | 2635       | 202.2 |  4.30
+Output  | 0.046155   | 0.062308   | 0.076734   |   4.0 |  0.00
+Modify  | 154.68     | 176.3      | 212.57     | 161.8 |  0.30
+Other   |            | 306.8      |            |       |  0.53
+
+Nlocal:        562.500 ave         593 max         541 min
+Histogram: 3 1 3 2 1 2 1 1 0 2
+Nghost:        23073.9 ave       23125 max       23031 min
+Histogram: 2 1 2 1 4 1 2 2 0 1
+Neighs:    1.23958e+06 ave 1.34457e+06 max 1.13092e+06 min
+Histogram: 1 1 2 1 2 2 3 2 0 2
+
+Total # of neighbors = 19833317
+Ave neighs/atom = 2203.7019
+Ave special neighs/atom = 2.4000000
+Neighbor list builds = 19733
+Dangerous builds = 0
+Total wall time: 16:04:49
